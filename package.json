@@ -4,13 +4,32 @@
   "license": "MIT",
   "scripts": {},
   "private": true,
-  "dependencies": {},
+  "dependencies": {
+    "@types/tmi.js": "^1.8.1",
+    "obs-websocket-js": "4.0",
+    "onvif": "^0.6.6",
+    "tmi.js": "^1.8.5",
+    "tslib": "^2.3.0"
+  },
   "devDependencies": {
     "@nrwl/cli": "14.5.0",
+    "@nrwl/eslint-plugin-nx": "14.5.0",
+    "@nrwl/jest": "14.5.0",
     "@nrwl/js": "14.5.0",
+    "@nrwl/linter": "14.5.0",
     "@nrwl/workspace": "14.5.0",
+    "@tsconfig/node16": "^1.0.3",
+    "@types/jest": "27.4.1",
+    "@types/node": "^16.11.46",
+    "@typescript-eslint/eslint-plugin": "^5.29.0",
+    "@typescript-eslint/parser": "^5.29.0",
+    "eslint": "~8.15.0",
+    "eslint-config-prettier": "8.1.0",
+    "jest": "27.5.1",
     "nx": "14.5.0",
     "prettier": "^2.6.2",
+    "ts-jest": "27.1.4",
+    "ts-node": "~10.8.0",
     "typescript": "~4.7.2"
   }
 }
