@@ -23,39 +23,57 @@ export type Config = {
   action: () => void;
 };
 export async function twitchObsManager(config: Config) {
-  // Initiating and connnecting OBS websocket
-  const userList: { username: string; date: Date }[] = [];
-  const obs: OBSWebSocket = await new OBSWebSocket();
-  obs.connect({
-    address: config.obs.address,
-    password: config.obs.password,
-  });
-
-  // initialize OBS view
-  const obs_view = new ObsView(obs);
-  // initialize twitch IRC
+  let userList: any;
+  let obs: any;
+  let obs_view: any;
   const chat = new client(config.tmi);
-  // add views to OBS View
-  config.views.map((e) => obs_view.addView(e.name));
+  try {
+    // Initiating and connnecting OBS websocket
+    userList = [];
+    obs = new OBSWebSocket();
+    // initialize OBS view
+    obs_view = new ObsView(obs);
+    // initialize twitch IRC
 
-  // assign chat functions
-  chat.on('chat', onChatHandler);
-  chat.on('connected', onConnectedHandler);
-  chat.on('disconnected', onDisconnectedHandler);
-  chat.connect();
+    // add views to OBS View
+    // config.views.map((e) => obs_view.addView(e.name));
 
-  // functions to handle
-  // chat - passes message to bot
-  // connected - prints connected
-  // disconnected - prints disconnected
+    // assign chat functions
+    chat.on('chat', onChatHandler);
+    chat.on('connected', onConnectedHandler);
+    chat.on('disconnected', onDisconnectedHandler);
+    await chat.connect();
+    console.log('created twitch connecton');
 
+    // obs
+    //   .connect({
+    //     address: config.obs.address,
+    //     password: config.obs.password,
+    //   }).then(()=>{
+    // console.log('created obs connecton');
+
+    // }).catch((e: any) => console.log(e));
+  } catch (e) {
+    console.log(e);
+    console.log('error connecting to OBS or Twitch');
+  }
+  /** functions to handle
+   ***chat - passes message to bot
+   * connected - prints connected
+   * disconnected - prints disconnected
+   * */
   function onChatHandler(
     channel: string,
-    userstate: ChatUserstate,
-    message: string
+    tags: any,
+    message: string,
+    self: any
   ) {
-    if (userstate['display-name'] == 'HerdBoss') return; // ignore the bot
-    chatBot(message, userstate);
+    console.log(channel);
+
+    if (self) return;
+    if (message.startsWith('!')) {
+      chatBot(channel, tags, message, self);
+    }
   }
 
   // Called every time the bot connects to Twitch chat:
@@ -108,7 +126,9 @@ export async function twitchObsManager(config: Config) {
     return found;
   }
   function addUser(username: string, time: Date) {
-    userList.push({ username, date: time });
+    if (userList) {
+      userList.push({ username, date: time });
+    }
   }
 
   function updateUser(username: string, date: Date) {
@@ -132,27 +152,42 @@ export async function twitchObsManager(config: Config) {
   const words_regex = /!([A-Za-z]+)/gm;
   const nums_regex = /[0-9]+/gm;
   // Chatbot called from onChatHandler
-  function chatBot(str: string, context: ChatUserstate) {
-    // array of words from message
-    const matches = str.toLowerCase().match(words_regex);
-    if (
-      (context.username && !checkTimeout(context.username)) ||
-      matches === null
-    ) {
-      return;
-    }
-    matches.forEach((match: string) => {
-      if (context.mod) {
-        // command comes from mood
-        parseModCommand(match);
-      } else if (context.subscriber) {
-        // command comes from subsriber
-        parseSubscriberCommand(str, match, matches);
-      } else {
-        // not a subscriber
-        sayForSubs();
+  async function chatBot(
+    channel: string,
+    tags: any,
+    str: string,
+    context: any
+  ) {
+    try {
+      // array of words from message
+      const matches = str.toLowerCase().match(words_regex);
+      if (
+        (context.username && !checkTimeout(context.username)) ||
+        matches === null
+      ) {
+        return;
       }
-    });
+      matches.forEach((match: string) => {
+        if (context.mod) {
+          // command comes from mood
+          console.log('comes from a mod');
+          parseModCommand(match);
+        } else if (context.subscriber) {
+          // command comes from subsriber
+          console.log('comes from a subscriber');
+          parseSubscriberCommand(str, match, matches);
+        } else {
+          // not a subscriber
+          console.log('parsing non-subscriber command');
+          sayForSubs(
+            channel,
+            context.username || context['display-name'] || ''
+          );
+        }
+      });
+    } catch (e) {
+      console.log(e);
+    }
   }
   // passes raw message, command found and rest of the seperated words
   function parseSubscriberCommand(
@@ -160,6 +195,7 @@ export async function twitchObsManager(config: Config) {
     match: string,
     matches: string[]
   ) {
+    console.log('parsing subscriber command');
     switch (match) {
       // SUBSCRIBER COMMANDS commands to control camera for subscribers
       case '!cam':
@@ -182,6 +218,7 @@ export async function twitchObsManager(config: Config) {
     }
   }
   function parseModCommand(cmd: string) {
+    console.log('parsing mod command');
     switch (cmd) {
       // MOD COMMANDS Mods should only be owners of farm
       case '!mute':
@@ -234,8 +271,12 @@ export async function twitchObsManager(config: Config) {
    * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
    * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
   // log prevent non-subscribers from PTZ and feed
-  function sayForSubs() {
-    chat.say(config.twitch_channel, 'This command is reserved for Subscribers');
+  async function sayForSubs(channel: any, user: string) {
+    console.log('say for subs executing...');
+    await chat.say(
+      channel,
+      `This command is reserved for Subscribers user ${user}. Apologies, but you can subscribe below!`
+    );
   }
   // log restart proocess
   const logRestart = () => {

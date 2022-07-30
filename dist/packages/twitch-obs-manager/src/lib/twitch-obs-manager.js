@@ -6,32 +6,50 @@ const tmi_js_1 = require("tmi.js");
 const obs_websocket_js_1 = tslib_1.__importDefault(require("obs-websocket-js"));
 const ObsView_1 = tslib_1.__importDefault(require("./ObsView"));
 async function twitchObsManager(config) {
-    // Initiating and connnecting OBS websocket
-    const userList = [];
-    const obs = await new obs_websocket_js_1.default();
-    obs.connect({
-        address: config.obs.address,
-        password: config.obs.password,
-    });
-    // initialize OBS view
-    const obs_view = new ObsView_1.default(obs);
-    // initialize twitch IRC
+    let userList;
+    let obs;
+    let obs_view;
     const chat = new tmi_js_1.client(config.tmi);
-    // add views to OBS View
-    config.views.map((e) => obs_view.addView(e.name));
-    // assign chat functions
-    chat.on('chat', onChatHandler);
-    chat.on('connected', onConnectedHandler);
-    chat.on('disconnected', onDisconnectedHandler);
-    chat.connect();
-    // functions to handle
-    // chat - passes message to bot
-    // connected - prints connected
-    // disconnected - prints disconnected
-    function onChatHandler(channel, userstate, message) {
-        if (userstate['display-name'] == 'HerdBoss')
-            return; // ignore the bot
-        chatBot(message, userstate);
+    try {
+        // Initiating and connnecting OBS websocket
+        userList = [];
+        obs = new obs_websocket_js_1.default();
+        // initialize OBS view
+        obs_view = new ObsView_1.default(obs);
+        // initialize twitch IRC
+        // add views to OBS View
+        // config.views.map((e) => obs_view.addView(e.name));
+        // assign chat functions
+        chat.on('chat', onChatHandler);
+        chat.on('connected', onConnectedHandler);
+        chat.on('disconnected', onDisconnectedHandler);
+        await chat.connect();
+        console.log('created twitch connecton');
+        // obs
+        //   .connect({
+        //     address: config.obs.address,
+        //     password: config.obs.password,
+        //   }).then(()=>{
+        // console.log('created obs connecton');
+        // }).catch((e: any) => console.log(e));
+    }
+    catch (e) {
+        console.log(e);
+        console.log('error connecting to OBS or Twitch');
+    }
+    /** functions to handle
+     ***chat - passes message to bot
+     * connected - prints connected
+     * disconnected - prints disconnected
+     * */
+    function onChatHandler(channel, tags, message, self) {
+        console.log(channel);
+        if (self)
+            return;
+        if (message.startsWith('!')) {
+            // chat.say(channel, 'interpreting message');
+            chatBot(channel, tags, message, self);
+        }
     }
     // Called every time the bot connects to Twitch chat:
     function onConnectedHandler(addr, port) {
@@ -78,7 +96,9 @@ async function twitchObsManager(config) {
         return found;
     }
     function addUser(username, time) {
-        userList.push({ username, date: time });
+        if (userList) {
+            userList.push({ username, date: time });
+        }
     }
     function updateUser(username, date) {
         const user = findUser(username);
@@ -100,30 +120,39 @@ async function twitchObsManager(config) {
     const words_regex = /!([A-Za-z]+)/gm;
     const nums_regex = /[0-9]+/gm;
     // Chatbot called from onChatHandler
-    function chatBot(str, context) {
-        // array of words from message
-        const matches = str.toLowerCase().match(words_regex);
-        if ((context.username && !checkTimeout(context.username)) ||
-            matches === null) {
-            return;
+    async function chatBot(channel, tags, str, context) {
+        try {
+            // array of words from message
+            const matches = str.toLowerCase().match(words_regex);
+            if ((context.username && !checkTimeout(context.username)) ||
+                matches === null) {
+                return;
+            }
+            matches.forEach((match) => {
+                if (context.mod) {
+                    // command comes from mood
+                    console.log('comes from a mod');
+                    parseModCommand(match);
+                }
+                else if (context.subscriber) {
+                    // command comes from subsriber
+                    console.log('comes from a subscriber');
+                    parseSubscriberCommand(str, match, matches);
+                }
+                else {
+                    // not a subscriber
+                    console.log('parsing non-subscriber command');
+                    sayForSubs(channel, context.username || context['display-name'] || '');
+                }
+            });
         }
-        matches.forEach((match) => {
-            if (context.mod) {
-                // command comes from mood
-                parseModCommand(match);
-            }
-            else if (context.subscriber) {
-                // command comes from subsriber
-                parseSubscriberCommand(str, match, matches);
-            }
-            else {
-                // not a subscriber
-                sayForSubs();
-            }
-        });
+        catch (e) {
+            console.log(e);
+        }
     }
     // passes raw message, command found and rest of the seperated words
     function parseSubscriberCommand(raw, match, matches) {
+        console.log('parsing subscriber command');
         switch (match) {
             // SUBSCRIBER COMMANDS commands to control camera for subscribers
             case '!cam':
@@ -143,6 +172,7 @@ async function twitchObsManager(config) {
         }
     }
     function parseModCommand(cmd) {
+        console.log('parsing mod command');
         switch (cmd) {
             // MOD COMMANDS Mods should only be owners of farm
             case '!mute':
@@ -195,8 +225,9 @@ async function twitchObsManager(config) {
      * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
      * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
     // log prevent non-subscribers from PTZ and feed
-    function sayForSubs() {
-        chat.say(config.twitch_channel, 'This command is reserved for Subscribers');
+    async function sayForSubs(channel, user) {
+        console.log('say for subs executing...');
+        await chat.say(channel, `This command is reserved for Subscribers user ${user}. Apologies, but you can subscribe below!`);
     }
     // log restart proocess
     const logRestart = () => {

@@ -21,28 +21,30 @@ export * from './lib/twitch-obs-manager';
 export const example = () => {
   const config: Config = {
     obs: {
-      address: '192.168.1.26',
-      password: 'fooFakePassword',
+      address: 'localhost:4444',
+      password: '143Jdaniel!',
     },
     tmi: {
       options: {
-        debug: process.env['NODE_ENV'] === 'PRODUCTION' ? false : true,
+        // debug: process.env['NODE_ENV'] === 'PRODUCTION' ? false : true,
       },
       identity: {
-        username: 'my_bot_name',
-        password: 'oauth:my_bot_token',
+        username: 'kunekunepigs',
+        password: 'oauth:u2nlsooae7x2yvmqz3wlndyh2wqvj6',
       },
-      channels: ['HalbertFarms'],
+      channels: ['HalbertFarm'],
     },
     views: [
-      { name: 'cam1' },
-      { name: 'cam2' },
-      { name: 'cam3' },
-      { name: 'cam4' },
-      { name: 'cam5' },
-      { name: 'cam6' },
+      { name: 'Cam 1' },
+      { name: 'Cam 2' },
+      { name: 'Cam 3' },
+      { name: 'Cam 4' },
+      { name: 'Cam 5' },
+      { name: 'Cam 6' },
+      { name: 'Cam 7' },
+      { name: 'Cam 8' },
     ],
-    twitch_channel: 'HalbertFarms',
+    twitch_channel: '#halbertfarm',
     action: function (): void {
       console.log('Executing subscriber free event');
     },
