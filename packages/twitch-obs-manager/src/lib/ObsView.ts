@@ -18,7 +18,7 @@ export class OBSView {
     this.obs = obs;
     this.obsWindows = [
       {
-        'scene-name': 'one',
+        'scene-name': '',
         item: { name: 'one', id: 1 },
         position: { alignment: 5, x: 0, y: 169 },
         scale: { x: 0.942187488079071, y: 0.9417344331741333 },

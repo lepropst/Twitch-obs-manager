@@ -21,7 +21,7 @@ export * from './lib/twitch-obs-manager';
 export const example = () => {
   const config: Config = {
     obs: {
-      address: 'localhost:4444',
+      address: '127.0.0.1:4444',
       password: '143Jdaniel!',
     },
     tmi: {

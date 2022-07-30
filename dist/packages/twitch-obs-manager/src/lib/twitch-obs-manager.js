@@ -29,9 +29,11 @@ async function twitchObsManager(config) {
         //   .connect({
         //     address: config.obs.address,
         //     password: config.obs.password,
-        //   }).then(()=>{
-        // console.log('created obs connecton');
-        // }).catch((e: any) => console.log(e));
+        //   })
+        //   .then(() => {
+        //     console.log('created obs connecton');
+        //   })
+        //   .catch((e: any) => console.log(e));
     }
     catch (e) {
         console.log(e);
@@ -47,7 +49,6 @@ async function twitchObsManager(config) {
         if (self)
             return;
         if (message.startsWith('!')) {
-            // chat.say(channel, 'interpreting message');
             chatBot(channel, tags, message, self);
         }
     }
@@ -227,7 +228,7 @@ async function twitchObsManager(config) {
     // log prevent non-subscribers from PTZ and feed
     async function sayForSubs(channel, user) {
         console.log('say for subs executing...');
-        await chat.say(channel, `This command is reserved for Subscribers user ${user}. Apologies, but you can subscribe below!`);
+        chat.say(channel, `This command is reserved for Subscribers user ${user}. Apologies, but you can subscribe below!`);
     }
     // log restart proocess
     const logRestart = () => {

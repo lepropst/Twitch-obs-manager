@@ -49,10 +49,11 @@ export async function twitchObsManager(config: Config) {
     //   .connect({
     //     address: config.obs.address,
     //     password: config.obs.password,
-    //   }).then(()=>{
-    // console.log('created obs connecton');
-
-    // }).catch((e: any) => console.log(e));
+    //   })
+    //   .then(() => {
+    //     console.log('created obs connecton');
+    //   })
+    //   .catch((e: any) => console.log(e));
   } catch (e) {
     console.log(e);
     console.log('error connecting to OBS or Twitch');
@@ -273,7 +274,7 @@ export async function twitchObsManager(config: Config) {
   // log prevent non-subscribers from PTZ and feed
   async function sayForSubs(channel: any, user: string) {
     console.log('say for subs executing...');
-    await chat.say(
+    chat.say(
       channel,
       `This command is reserved for Subscribers user ${user}. Apologies, but you can subscribe below!`
     );
