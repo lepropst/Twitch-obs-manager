@@ -21,12 +21,12 @@ export * from './lib/twitch-obs-manager';
 export const example = () => {
   const config: Config = {
     obs: {
-      address: '127.0.0.1:4444',
+      address: 'localhost:4444',
       password: '143Jdaniel!',
     },
     tmi: {
       options: {
-        // debug: process.env['NODE_ENV'] === 'PRODUCTION' ? false : true,
+        debug: process.env['NODE_ENV'] === 'PRODUCTION' ? false : true,
       },
       identity: {
         username: 'kunekunepigs',
@@ -35,14 +35,14 @@ export const example = () => {
       channels: ['HalbertFarm'],
     },
     views: [
-      { name: 'Cam 1' },
-      { name: 'Cam 2' },
-      { name: 'Cam 3' },
-      { name: 'Cam 4' },
-      { name: 'Cam 5' },
-      { name: 'Cam 6' },
-      { name: 'Cam 7' },
-      { name: 'Cam 8' },
+      { name: 'Cam 1', alias: 'cam1' },
+      { name: 'Cam 2', alias: 'cam2' },
+      // { name: 'Cam 3' },
+      // { name: 'Cam 4' },
+      // { name: 'Cam 5' },
+      // { name: 'Cam 6' },
+      // { name: 'Cam 7' },
+      // { name: 'Cam 8' },
     ],
     twitch_channel: '#halbertfarm',
     action: function (): void {

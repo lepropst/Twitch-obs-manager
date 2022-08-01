@@ -3,10 +3,12 @@ import OBSWebSocket from 'obs-websocket-js';
 import PanZoomTilt from './PanZoomTilt';
 import ObsView from './ObsView';
 
+const words_regex = /!([A-Za-z]+)/gm;
+
 export type Config = {
   obs: {
     address: string;
-    password: string;
+    password?: string;
   };
   tmi: Options;
   PTZ?: {
@@ -18,7 +20,7 @@ export type Config = {
       version: number;
     }[];
   };
-  views: { name: string }[];
+  views: { name: string; alias: string }[];
   twitch_channel: string;
   action: () => void;
 };
@@ -27,36 +29,42 @@ export async function twitchObsManager(config: Config) {
   let obs: any;
   let obs_view: any;
   const chat = new client(config.tmi);
+
   try {
     // Initiating and connnecting OBS websocket
     userList = [];
     obs = new OBSWebSocket();
+
+    obs.on('AuthenticationSuccess', () => console.log('obs authenticated'));
+
+    obs.on('SwitchScenes', (data: any) => {
+      console.log(`New Active Scene: ${data.sceneName}`);
+    });
     // initialize OBS view
     obs_view = new ObsView(obs);
     // initialize twitch IRC
 
     // add views to OBS View
-    // config.views.map((e) => obs_view.addView(e.name));
+    config.views.map((e) => obs_view.addView(e.name, e.alias));
 
     // assign chat functions
     chat.on('chat', onChatHandler);
     chat.on('connected', onConnectedHandler);
     chat.on('disconnected', onDisconnectedHandler);
+    obs
+      .connect(config.obs)
+      .then(() => console.log('connected'))
+      .catch((e: any) => console.log(e));
+
     await chat.connect();
     console.log('created twitch connecton');
-
-    // obs
-    //   .connect({
-    //     address: config.obs.address,
-    //     password: config.obs.password,
-    //   })
-    //   .then(() => {
-    //     console.log('created obs connecton');
-    //   })
-    //   .catch((e: any) => console.log(e));
+    const data = await obs.send('GetSceneList');
+    console.log(data.length);
+    console.log('created obs connecton');
   } catch (e) {
     console.log(e);
     console.log('error connecting to OBS or Twitch');
+    process.exit(1);
   }
   /** functions to handle
    ***chat - passes message to bot
@@ -150,8 +158,6 @@ export async function twitchObsManager(config: Config) {
    * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
    * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-  const words_regex = /!([A-Za-z]+)/gm;
-  const nums_regex = /[0-9]+/gm;
   // Chatbot called from onChatHandler
   async function chatBot(
     channel: string,
@@ -175,15 +181,16 @@ export async function twitchObsManager(config: Config) {
           parseModCommand(match);
         } else if (context.subscriber) {
           // command comes from subsriber
-          console.log('comes from a subscriber');
+          console.log('parsing subscriber command');
           parseSubscriberCommand(str, match, matches);
         } else {
           // not a subscriber
           console.log('parsing non-subscriber command');
-          sayForSubs(
-            channel,
-            context.username || context['display-name'] || ''
-          );
+          // sayForSubs(
+          //   channel,
+          //   context.username || context['display-name'] || context
+          // );
+          parseSubscriberCommand(str, match, matches);
         }
       });
     } catch (e) {
@@ -196,7 +203,6 @@ export async function twitchObsManager(config: Config) {
     match: string,
     matches: string[]
   ) {
-    console.log('parsing subscriber command');
     switch (match) {
       // SUBSCRIBER COMMANDS commands to control camera for subscribers
       case '!cam':
@@ -247,6 +253,7 @@ export async function twitchObsManager(config: Config) {
     // if (context.username && obs_view.cameraTimeout(context.username)) {
     //   return;
     // }
+
     const user = findUser(username);
     if (user === false) {
       // user not found

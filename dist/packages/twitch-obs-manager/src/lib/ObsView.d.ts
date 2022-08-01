@@ -33,10 +33,14 @@ export declare class OBSView {
             y?: number;
         };
     }[];
+    alias: {
+        alias: string;
+        name: string;
+    }[];
     current: number;
     constructor(obs: OBSWebSocket);
     processChat(msg: string): void;
-    addView(obsName: string): void;
+    addView(obsName: string, aliases?: string): void;
     setWindow(index: number, name: string): null | void;
     updateOBS(): void;
 }

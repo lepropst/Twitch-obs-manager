@@ -6,7 +6,7 @@
   "typings": "./src/index.d.ts",
   "dependencies": {},
   "peerDependencies": {
-    "obs-websocket-js": "4.0",
+    "obs-websocket-js": "^4.0.3",
     "onvif": "^0.6.6",
     "tmi.js": "^1.8.5",
     "tslib": "^2.3.0"

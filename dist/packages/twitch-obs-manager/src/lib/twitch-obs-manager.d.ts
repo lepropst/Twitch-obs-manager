@@ -2,7 +2,7 @@ import { Options } from 'tmi.js';
 export declare type Config = {
     obs: {
         address: string;
-        password: string;
+        password?: string;
     };
     tmi: Options;
     PTZ?: {
@@ -16,6 +16,7 @@ export declare type Config = {
     };
     views: {
         name: string;
+        alias: string;
     }[];
     twitch_channel: string;
     action: () => void;
