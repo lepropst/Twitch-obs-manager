@@ -7,7 +7,7 @@ const words_regex = /!([A-Za-z]+)/gm;
 
 export type Config = {
   obs: {
-    address: string;
+    url: string;
     password?: string;
   };
   tmi: Options;
@@ -20,7 +20,7 @@ export type Config = {
       version: number;
     }[];
   };
-  views: { name: string; alias: string }[];
+  views: { name: string; alias: string[] }[];
   twitch_channel: string;
   action: () => void;
 };
@@ -36,35 +36,31 @@ export async function twitchObsManager(config: Config) {
     obs = new OBSWebSocket();
 
     obs.on('AuthenticationSuccess', () => console.log('obs authenticated'));
-
     obs.on('SwitchScenes', (data: any) => {
       console.log(`New Active Scene: ${data.sceneName}`);
     });
-    // initialize OBS view
-    obs_view = new ObsView(obs);
-    // initialize twitch IRC
-
-    // add views to OBS View
-    config.views.map((e) => obs_view.addView(e.name, e.alias));
 
     // assign chat functions
     chat.on('chat', onChatHandler);
     chat.on('connected', onConnectedHandler);
     chat.on('disconnected', onDisconnectedHandler);
-    obs
-      .connect(config.obs)
-      .then(() => console.log('connected'))
-      .catch((e: any) => console.log(e));
+    const { obsWebSocketVersion, negotiatedRpcVersion } = await obs.connect(
+      config.obs.url,
+      config.obs.password
+    );
+    console.log(
+      `Connected to server ${obsWebSocketVersion} (using RPC ${negotiatedRpcVersion})`
+    );
+
+    // initialize OBS view
+    obs_view = new ObsView(obs);
+    // add views to OBS View
+    config.views.map((e) => obs_view.addAlias(e.name, e.alias));
 
     await chat.connect();
     console.log('created twitch connecton');
-    const data = await obs.send('GetSceneList');
-    console.log(data.length);
-    console.log('created obs connecton');
   } catch (e) {
-    console.log(e);
-    console.log('error connecting to OBS or Twitch');
-    process.exit(1);
+    throw new Error(`Unable to connect to OBS or Twitch\n${e}`);
   }
   /** functions to handle
    ***chat - passes message to bot
@@ -92,7 +88,7 @@ export async function twitchObsManager(config: Config) {
   // Called every time the bot disconnects from Twitch:
   function onDisconnectedHandler(reason: string) {
     console.log(`Disconnected: ${reason}`);
-    process.exit(1);
+    throw new Error(`Disconnected\n${reason}`);
   }
 
   /**
@@ -109,6 +105,7 @@ export async function twitchObsManager(config: Config) {
   //   return;
   // }
   // Finally update userbase and call passed config action
+
   function handleFeedCommand(cmd: string, rest: string[]) {
     // set Window 0 to the camera labeled 'three'
     obs_view.setWindow(0, 'cam3');

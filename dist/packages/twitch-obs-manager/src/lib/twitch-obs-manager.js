@@ -19,29 +19,21 @@ async function twitchObsManager(config) {
         obs.on('SwitchScenes', (data) => {
             console.log(`New Active Scene: ${data.sceneName}`);
         });
-        // initialize OBS view
-        obs_view = new ObsView_1.default(obs);
-        // initialize twitch IRC
-        // add views to OBS View
-        config.views.map((e) => obs_view.addView(e.name, e.alias));
         // assign chat functions
         chat.on('chat', onChatHandler);
         chat.on('connected', onConnectedHandler);
         chat.on('disconnected', onDisconnectedHandler);
-        obs
-            .connect(config.obs)
-            .then(() => console.log('connected'))
-            .catch((e) => console.log(e));
+        const { obsWebSocketVersion, negotiatedRpcVersion } = await obs.connect(config.obs.url, config.obs.password);
+        console.log(`Connected to server ${obsWebSocketVersion} (using RPC ${negotiatedRpcVersion})`);
+        // initialize OBS view
+        obs_view = new ObsView_1.default(obs);
+        // add views to OBS View
+        config.views.map((e) => obs_view.addAlias(e.name, e.alias));
         await chat.connect();
         console.log('created twitch connecton');
-        const data = await obs.send('GetSceneList');
-        console.log(data.length);
-        console.log('created obs connecton');
     }
     catch (e) {
-        console.log(e);
-        console.log('error connecting to OBS or Twitch');
-        process.exit(1);
+        throw new Error(`Unable to connect to OBS or Twitch\n${e}`);
     }
     /** functions to handle
      ***chat - passes message to bot
@@ -63,7 +55,7 @@ async function twitchObsManager(config) {
     // Called every time the bot disconnects from Twitch:
     function onDisconnectedHandler(reason) {
         console.log(`Disconnected: ${reason}`);
-        process.exit(1);
+        throw new Error(`Disconnected\n${reason}`);
     }
     /**
      *
