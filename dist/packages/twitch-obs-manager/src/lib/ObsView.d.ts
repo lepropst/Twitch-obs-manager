@@ -2,6 +2,7 @@ import OBSWebSocket from 'obs-websocket-js';
 export declare class OBSView {
     obs: OBSWebSocket;
     obsWindows: any[];
+    obs_windows: any[];
     alias: {
         alias: string[];
         name: string;

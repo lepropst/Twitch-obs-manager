@@ -16,9 +16,6 @@ async function twitchObsManager(config) {
         userList = [];
         obs = new obs_websocket_js_1.default();
         obs.on('AuthenticationSuccess', () => console.log('obs authenticated'));
-        obs.on('SwitchScenes', (data) => {
-            console.log(`New Active Scene: ${data.sceneName}`);
-        });
         // assign chat functions
         chat.on('chat', onChatHandler);
         chat.on('connected', onConnectedHandler);
@@ -29,6 +26,7 @@ async function twitchObsManager(config) {
         obs_view = new ObsView_1.default(obs);
         // add views to OBS View
         config.views.map((e) => obs_view.addAlias(e.name, e.alias));
+        console.log(obs_view.obs_windows);
         await chat.connect();
         console.log('created twitch connecton');
     }
@@ -80,8 +78,8 @@ async function twitchObsManager(config) {
      *
      * Database of users for day. Should reset every 24 hours, otherwise stores dates with username and compares to the beginning of current day
      * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-     * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-    // functions to record and find username, can be modified to a database if necessary
+    functions to record and find username, can be modified to a database if necessary
+   */
     function findUser(username) {
         let found = false;
         const length = userList.length;
@@ -131,12 +129,11 @@ async function twitchObsManager(config) {
                 }
                 else if (context.subscriber) {
                     // command comes from subsriber
-                    console.log('parsing subscriber command');
+                    chat.say(config.twitch_channel, 'Command recieved, thank you for subscribing!');
                     parseSubscriberCommand(str, match, matches);
                 }
                 else {
                     // not a subscriber
-                    console.log('parsing non-subscriber command');
                     // sayForSubs(
                     //   channel,
                     //   context.username || context['display-name'] || context
@@ -151,6 +148,7 @@ async function twitchObsManager(config) {
     }
     // passes raw message, command found and rest of the seperated words
     function parseSubscriberCommand(raw, match, matches) {
+        let result = { name: '', chatOutput: 'Command not found, sorry.' };
         switch (match) {
             // SUBSCRIBER COMMANDS commands to control camera for subscribers
             case '!cam':
@@ -167,6 +165,14 @@ async function twitchObsManager(config) {
             case '!feed':
                 handleFeedCommand(match, matches.splice(matches.indexOf(match), matches.length));
                 break;
+            default:
+                config.commands.map((e) => {
+                    console.log(e, match);
+                    if ('!' + e.name === raw) {
+                        result = e;
+                    }
+                });
+                chat.say(config.twitch_channel, result.chatOutput);
         }
     }
     function parseModCommand(cmd) {
@@ -225,7 +231,7 @@ async function twitchObsManager(config) {
     // log prevent non-subscribers from PTZ and feed
     async function sayForSubs(channel, user) {
         console.log('say for subs executing...');
-        chat.say(channel, `This command is reserved for Subscribers user ${user}. Apologies, but you can subscribe below!`);
+        chat.say(channel, `This command is reserved for Subscribers. Apologies, you can subscribe on our page!`);
     }
     // log restart proocess
     const logRestart = () => {

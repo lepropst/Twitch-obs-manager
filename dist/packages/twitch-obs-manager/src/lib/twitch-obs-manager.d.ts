@@ -14,6 +14,10 @@ export declare type Config = {
             version: number;
         }[];
     };
+    commands: {
+        name: string;
+        chatOutput: string;
+    }[];
     views: {
         name: string;
         alias: string[];

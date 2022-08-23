@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OBSView = void 0;
 class OBSView {
     constructor(obs) {
+        this.obs_windows = [];
         try {
             this.obs = obs;
             this.alias = [];
@@ -12,7 +13,9 @@ class OBSView {
                 .then((e) => {
                 this.obsWindows = Array.from(e.sceneItems.filter((value, index, arr) => value['inputKind'] &&
                     value['inputKind'] !== 'text_ft2_source_v2'));
-                console.log(this.obsWindows);
+                this.obs_windows = Array.from(e.sceneItems.filter((value, index, arr) => value['inputKind'] &&
+                    value['inputKind'] !== 'text_ft2_source_v2'));
+                console.log(this.obs_windows);
             })
                 .catch((e) => {
                 console.log(`unable to add current items\n${e}`);
@@ -29,10 +32,14 @@ class OBSView {
         console.log('processing chat -obsView');
         try {
             const window_regex = /[0-8]+/gm;
-            const obsName_regex = /([A-Za-z]+[1-6])/gm;
+            const obsName_regex = /([A-Za-z1-8 ]+)/gm;
             const name_regex = /([A-Za-z])/gm;
             // extract word number combinations ass obsNames. I.e. cam1, cam2, cam3, cam4, etc.
             const obsName = msg.match(obsName_regex);
+            const windowRegex = msg.match(window_regex);
+            if (windowRegex !== null) {
+                console.log(windowRegex[windowRegex.length]);
+            }
             let tmpName = '';
             if (obsName !== null) {
                 this.alias.forEach((alias) => {

@@ -1,6 +1,5 @@
 import { client, Options, ChatUserstate } from 'tmi.js';
 import OBSWebSocket from 'obs-websocket-js';
-import PanZoomTilt from './PanZoomTilt';
 import ObsView from './ObsView';
 
 const words_regex = /!([A-Za-z]+)/gm;
@@ -20,6 +19,7 @@ export type Config = {
       version: number;
     }[];
   };
+  commands: { name: string; chatOutput: string }[];
   views: { name: string; alias: string[] }[];
   twitch_channel: string;
   action: () => void;
@@ -36,9 +36,6 @@ export async function twitchObsManager(config: Config) {
     obs = new OBSWebSocket();
 
     obs.on('AuthenticationSuccess', () => console.log('obs authenticated'));
-    obs.on('SwitchScenes', (data: any) => {
-      console.log(`New Active Scene: ${data.sceneName}`);
-    });
 
     // assign chat functions
     chat.on('chat', onChatHandler);
@@ -56,6 +53,7 @@ export async function twitchObsManager(config: Config) {
     obs_view = new ObsView(obs);
     // add views to OBS View
     config.views.map((e) => obs_view.addAlias(e.name, e.alias));
+    console.log(obs_view.obs_windows);
 
     await chat.connect();
     console.log('created twitch connecton');
@@ -116,9 +114,8 @@ export async function twitchObsManager(config: Config) {
    *
    * Database of users for day. Should reset every 24 hours, otherwise stores dates with username and compares to the beginning of current day
    * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-   * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-  // functions to record and find username, can be modified to a database if necessary
+  functions to record and find username, can be modified to a database if necessary
+ */
   function findUser(
     username: string
   ): false | { username: string; date: Date } {
@@ -178,11 +175,13 @@ export async function twitchObsManager(config: Config) {
           parseModCommand(match);
         } else if (context.subscriber) {
           // command comes from subsriber
-          console.log('parsing subscriber command');
+          chat.say(
+            config.twitch_channel,
+            'Command recieved, thank you for subscribing!'
+          );
           parseSubscriberCommand(str, match, matches);
         } else {
           // not a subscriber
-          console.log('parsing non-subscriber command');
           // sayForSubs(
           //   channel,
           //   context.username || context['display-name'] || context
@@ -200,6 +199,7 @@ export async function twitchObsManager(config: Config) {
     match: string,
     matches: string[]
   ) {
+    let result = { name: '', chatOutput: 'Command not found, sorry.' };
     switch (match) {
       // SUBSCRIBER COMMANDS commands to control camera for subscribers
       case '!cam':
@@ -219,6 +219,14 @@ export async function twitchObsManager(config: Config) {
           matches.splice(matches.indexOf(match), matches.length)
         );
         break;
+      default:
+        config.commands.map((e) => {
+          console.log(e, match);
+          if ('!' + e.name === raw) {
+            result = e;
+          }
+        });
+        chat.say(config.twitch_channel, result.chatOutput);
     }
   }
   function parseModCommand(cmd: string) {
@@ -280,7 +288,7 @@ export async function twitchObsManager(config: Config) {
     console.log('say for subs executing...');
     chat.say(
       channel,
-      `This command is reserved for Subscribers user ${user}. Apologies, but you can subscribe below!`
+      `This command is reserved for Subscribers. Apologies, you can subscribe on our page!`
     );
   }
   // log restart proocess
