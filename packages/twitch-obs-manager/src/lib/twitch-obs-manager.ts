@@ -1,4 +1,4 @@
-import { client, Options, ChatUserstate } from 'tmi.js';
+import { client, Options } from 'tmi.js';
 import OBSWebSocket from 'obs-websocket-js';
 import ObsView from './ObsView';
 
@@ -255,10 +255,6 @@ export async function twitchObsManager(config: Config) {
 
   // Checks if user is recorded and if their date is before or after the beginninig of today.
   function checkTimeout(username: string): boolean {
-    // if (context.username && obs_view.cameraTimeout(context.username)) {
-    //   return;
-    // }
-
     const user = findUser(username);
     if (user === false) {
       // user not found
@@ -281,7 +277,6 @@ export async function twitchObsManager(config: Config) {
    * Logging functions
    *
    *
-   * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
    * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
   // log prevent non-subscribers from PTZ and feed
   async function sayForSubs(channel: any, user: string) {
@@ -291,6 +286,7 @@ export async function twitchObsManager(config: Config) {
       `This command is reserved for Subscribers. Apologies, you can subscribe on our page!`
     );
   }
+
   // log restart proocess
   const logRestart = () => {
     chat.say(config.twitch_channel, 'Stopping');
