@@ -2,6 +2,8 @@
   "$schema": "./node_modules/nx/schemas/workspace-schema.json",
   "version": 2,
   "projects": {
+    "twitch-obs": "packages/twitch-obs",
+    "twitch-obs-app": "packages/twitch-obs-app",
     "twitch-obs-manager": "packages/twitch-obs-manager"
   }
 }

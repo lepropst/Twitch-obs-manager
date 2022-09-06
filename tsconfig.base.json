@@ -17,6 +17,7 @@
     "baseUrl": ".",
     "types": ["node"],
     "paths": {
+      "@twitch-obs-manager/twitch-obs": ["packages/twitch-obs/src/index.ts"],
       "@twitch-obs-manager/twitch-obs-manager": [
         "packages/twitch-obs-manager/src/index.ts"
       ]
