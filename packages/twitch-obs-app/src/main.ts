@@ -2,6 +2,10 @@ import {
   Config,
   twitchObsManager,
 } from '@twitch-obs-manager/twitch-obs-manager';
+import {
+  twitchObs as twitchObsManagerV2,
+  Config as ConfigV2,
+} from '@twitch-obs-manager/twitch-obs';
 
 export const appv1 = () => {
   const config: Config = {
@@ -46,8 +50,8 @@ export const appv1 = () => {
   twitchObsManager(config);
 };
 
-export const appv2 = () => {
-  const config: Config = {
+export const appv2 = async () => {
+  const config: ConfigV2 = {
     obs: {
       url: 'ws://127.0.0.1:4455',
       password: '143Jdaniel!@#$',
@@ -85,8 +89,10 @@ export const appv2 = () => {
     action: function (): void {
       console.log('Executing subscriber free event');
     },
+    logger: console,
+    cam_names: [],
   };
-  twitchObsManager(config);
+  await twitchObsManagerV2(config);
 };
 
 appv1();

@@ -1,11 +1,14 @@
 import tmi, { Options } from 'tmi.js';
 import OBSWebSocket from 'obs-websocket-js';
-
+import sqlite3 from 'sqlite3';
 // import OBSView from './obs-view.js'
 // import PTZ from './ptz.js'
 // import { triggerRestart } from './autostart.mjs'
-import { Stojo } from '@codegrill/stojo';
+
 import attachProcessEvents from './attachProcessEvents';
+import { Config } from './types';
+import { openDb } from './sqlite_db';
+import { attachObsEvents } from './attachObsEvents';
 // import { logger } from './slacker.mjs'
 // import * as cenv from 'custom-env'
 // import crypto from 'crypto'
@@ -13,34 +16,21 @@ import attachProcessEvents from './attachProcessEvents';
 // import SceneHerder from './sceneHerder.mjs'
 // import linkit from './linkit.mjs'
 
-export type Config = {
-  obs: {
-    url: string;
-    password?: string;
-  };
-  tmi: Options;
-  PTZ?: {
-    cameras: {
-      label: string;
-      hostname: string;
-      username: string;
-      password: string;
-      version: number;
-    }[];
-  };
-  commands: { name: string; chatOutput: string }[];
-  views: { name: string; alias: string[] }[];
-  twitch_channel: string;
-  action: () => void;
-  logger: any;
-  cam_names: string[];
-};
-
-export function twitchObs(config: Config): string {
+export async function twitchObs(config: Config) {
   const logger = config.logger || console;
-  const cams = { names: config.cam_names };
-  const obs_retries = 0;
-  const stream = {};
+  // Non-PTZ network cams
+  const ipCams = { names: config.cam_names || [], cams: config.cams };
+  // number of OBS connection retries
+  let obs_retries = 0;
+  // OBS Windows
+  const windows = {
+    sourceKinds: config.windows.sourceKinds || ['dshow_input', 'ffmpeg_source'],
+  };
+
+  // Twitch stream options
+  const stream: any = {};
+  let admins: string[] = [];
+  // Application state
   let exited = false;
   const shutdown = [shutdownFunction];
   async function shutdownFunction() {
@@ -60,108 +50,82 @@ export function twitchObs(config: Config): string {
     }
   }
 
-  attachProcessEvents(logger, shutdownFunction);
-
-  return 'twitch-obs';
-}
-
-(async () => {
-  const app = {};
-  app.exited = false;
-  app.obs = {};
-
-  // PTZ controllable cameras
-  app.ptz = {};
-  app.ptz.names = [];
-  app.ptz.cams = new Map();
-
-  // Non-PTZ network cams
-  app.ipcams = {};
-  app.ipcams.names = [];
-  app.ipcams.cams = new Map();
-
-  app.obs.retries = 0;
-  app.stream = {};
-  app.shutdown = [];
-
-  // ///////////////////////////////////////////////////////////////////////////
   // Setup general application behavior and logging
-
-  await import(process.env.APP_CONFIG)
-    .then((config) => {
-      if (config && config.default) {
-        logger.debug(`Loaded app config: ${JSON.stringify(config)}`);
-        app.config = JSON.parse(JSON.stringify(config.default)); // deep copy
-
-        // Set defaults if they don't exist
-        if (!app.config.windows) app.config.windows = {};
-        if (!app.config.windows.sourceKinds)
-          app.config.windows.sourceKinds = ['dshow_input', 'ffmpeg_source'];
-      }
-    })
-    .catch((e) =>
-      logger.warn(`Unable to load config ${process.env.APP_CONFIG}: ${e}`)
-    );
-
-  // Grab the version and log it
-  await import('../package.json')
+  await import('../../package.json')
     .then((pkg) => {
       logger.log(`== starting ${pkg.default.name}@${pkg.default.version}`);
     })
     .catch((e) => {
       logger.error(`Unable to open package information: ${e}`);
     });
-
-  // Always show log levels at startup
   logger.log(
     `== log levels: { console: ${logger.getLogLevel(
       logger.level.console
     )}, slack: ${logger.getLogLevel(logger.level.slack)} }`
   );
 
+  attachProcessEvents(logger, shutdownFunction);
+
   // Open and initialize the sqlite database for storing object states across restarts
-  const db = new Stojo({ logger: logger, file: process.env.DB_FILE });
-  app.shutdown.push(() => {
+  const db = await openDb({
+    logger: logger,
+    config: {
+      ...config.sqlite_options,
+      filename: config.sqlite_options.filename || 'tmp/admins.db',
+      driver: sqlite3.Database,
+    },
+  });
+  shutdown.push(async () => {
     logger.info('== Shutting down the local database...');
     db.close();
   });
   const adminStore = new AdminStore({ logger: logger, db: db });
-  app.admins = await adminStore.admins; // load from store first
+  admins = await adminStore.admins; // load from store first
 
-  if (app.admins.size === 0) {
+  if (admins.length === 0) {
     // if nothing in the store, load from the app config
-    app.config.admins.forEach((admin) => app.admins.add(admin));
-    adminStore.admins = app.admins; // persist any admins from the config
+    config.admins.forEach((admin) => admins.push(admin));
+    adminStore.admins = admins; // persist any admins from the config
   }
 
-  // ///////////////////////////////////////////////////////////////////////////
+  // User type functions
+  function isSubscriber(context: any) {
+    return context.subscriber || isModerator(context);
+  }
+
+  function isModerator(context: any) {
+    return (
+      context.mod ||
+      admins.includes(context.username.toLowerCase()) ||
+      isBroadcaster(context)
+    );
+  }
+
+  function isBroadcaster(context: any) {
+    return context.badges && context.badges.broadcaster;
+  }
   // Connect to OBS
   const obs = new OBSWebSocket();
-  app.shutdown.push(async () => {
+  shutdown.push(async () => {
     logger.info('== Shutting down OBS...');
     obs.disconnect();
   });
-  const obsView = new OBSView({
+  const obsView = new {
     obs: obs,
     db: db,
-    windowKinds: app.config.windows.sourceKinds,
+    windowKinds: windows.sourceKinds,
     logger: logger,
-  });
+  }();
 
-  async function connectOBS(obs) {
-    logger.info(
-      `== connecting to OBS host:${process.env.OBS_ADDRESS}, hash: ${crypto
-        .createHash('sha256')
-        .update(process.env.OBS_PASSWORD)
-        .digest('base64')}`
-    );
+  async function connectOBS(obs: OBSWebSocket) {
+    logger.info(`== connecting to OBS host:${config.obs.url}`);
     return obs
       .connect({
-        address: process.env.OBS_ADDRESS,
-        password: process.env.OBS_PASSWORD,
+        address: config.obs.url,
+        password: config.obs.password,
       })
       .then(() => {
-        app.obs.retries = 0; // Reset for the next disconnect
+        obs_retries = 0; // Reset for the next disconnect
         logger.info('== connected to OBS');
       })
       .then(() => obsView.syncFromObs());
@@ -169,24 +133,19 @@ export function twitchObs(config: Config): string {
 
   function reconnectOBS() {
     // If the connection closes, retry after the timeout period
-    if (process.env.OBS_RETRY !== 'false' && !app.exited) {
-      const delay = Math.round(
-        (process.env.OBS_RETRY_DELAY || 3000) *
-          (process.env.OBS_RETRY_DECAY || 1.2) ** app.obs.retries++
-      );
+    if (!exited) {
+      const delay = Math.round(3000 * 1.2 ** obs_retries++);
       logger.info(
-        `OBS reconnect delay: ${delay / 1000} seconds, retries: ${
-          app.obs.retries
-        }`
+        `OBS reconnect delay: ${delay / 1000} seconds, retries: ${obs_retries}`
       );
       setTimeout(() => {
         connectOBS(obs)
           .then(() => obs.send('GetVideoInfo'))
           .then((info) => {
             // Need the info to get the stream resolution
-            app.stream.info = info;
+            stream.info = info;
             logger.info(
-              `Stream Base Resolution: ${app.stream.info.baseWidth}x${app.stream.info.baseHeight}, Output Resolution: ${app.stream.info.outputWidth}x${app.stream.info.outputHeight}`
+              `Stream Base Resolution: ${stream.info.baseWidth}x${stream.info.baseHeight}, Output Resolution: ${stream.info.outputWidth}x${stream.info.outputHeight}`
             );
             logger.debug(`Video Info: ${JSON.stringify(info, null, 2)}`);
           })
@@ -194,52 +153,13 @@ export function twitchObs(config: Config): string {
       }, delay);
     }
   }
-
-  obs.on('ConnectionOpened', () => {
-    logger.info('== OBS connection opened');
-  });
-  obs.on('ConnectionClosed', () => {
-    logger.info('== OBS connection closed');
-    reconnectOBS();
-  });
-  obs.on('AuthenticationSuccess', () => {
-    logger.info('== OBS successfully authenticated');
-  });
-  obs.on('AuthenticationFailure', () => {
-    logger.info('== OBS failed authentication');
-  });
-  obs.on('SceneItemVisibilityChanged', (data) =>
-    obsView.sceneItemVisibilityChanged(data)
-  );
-  obs.on('SourceOrderChanged', (data) => obsView.sourceOrderChanged(data));
-  obs.on('SceneItemTransformChanged', (data) =>
-    obsView.sceneItemTransformChanged(data)
-  );
-  obs.on('SwitchScenes', (data) => obsView.switchScenes(data));
-  obs.on('SourceRenamed', (data) => obsView.sourceRenamed(data));
-  obs.on('SourceCreated', (data) => obsView.sourceCreated(data));
-  obs.on('ScenesChanged', (data) => obsView.scenesChanged(data));
-  obs.on('SourceDestroyed', (data) => obsView.sourceDestroyed(data));
-  obs.on('SceneItemRemoved', (data) => obsView.sourceItemRemoved(data));
-  obs.on('error', (err) =>
-    logger.error(`== OBS error: ${JSON.stringify(err)}`)
-  );
+  attachObsEvents(obs, obsView, logger, reconnectOBS);
 
   // Connect to OBS
   connectOBS(obs).catch((e) => logger.error(`Connect OBS failed: ${e.error}`));
-
-  // ///////////////////////////////////////////////////////////////////////////
   // Connect to twitch
-  const chat = new tmi.Client({
-    identity: {
-      username: process.env.TWITCH_USER,
-      password: process.env.TWITCH_TOKEN,
-    },
-    connection: { reconnect: process.env.TWITCH_RECONNECT !== 'false' },
-    maxReconnectAttempts: process.env.TWITCH_RECONNECT_TRIES,
-    channels: [process.env.TWITCH_CHANNEL],
-  });
-  app.shutdown.push(async () => {
+  const chat = new tmi.Client(config.tmi);
+  shutdown.push(async () => {
     logger.info('== Shutting down twitch...');
     await chat.disconnect();
   });
@@ -252,6 +172,50 @@ export function twitchObs(config: Config): string {
     logger.info('== reconnecting to twitch');
   });
 
+  // init cameras using config
+  async function initCams(
+    map: { [key: string]: { [key: string]: any } },
+    names: string[],
+    configFile: string,
+    element: string,
+    options = {}
+  ) {
+    return import(configFile)
+      .catch((e) => {
+        logger.error(`Unable to import '${configFile}': ${e}`);
+      })
+      .then((conf) => {
+        // Grab the appropriate entry from the config file
+        if (element in conf.default) {
+          for (const [key, value] of Object.entries(conf.default[element])) {
+            value.name = key;
+            Object.assign(value, options);
+
+            names.push(key.toLocaleLowerCase());
+          }
+        }
+      });
+  }
+  // Load any non-PTZ network cameras
+  await initCams(ipCams.cams, ipCams.names, 'static', {
+    chat: chat,
+    channel: config.twitch_channel,
+    logger: logger,
+    db: db,
+  })
+    .then(() => logger.info('== loaded IP cameras'))
+    .catch((err) => logger.error(`== error loading IP cameras: ${err}`));
+}
+
+(async () => {
+  // Grab the version and log it
+
+  // Always show log levels at startup
+
+  // ///////////////////////////////////////////////////////////////////////////
+
+  // ///////////////////////////////////////////////////////////////////////////
+
   // ///////////////////////////////////////////////////////////////////////////
   // Load the PTZ cameras
   await initCams(app.ptz.cams, app.ptz.names, process.env.PTZ_CONFIG, 'cams', {
@@ -262,17 +226,6 @@ export function twitchObs(config: Config): string {
   })
     .then(() => logger.info('== loaded PTZ cameras'))
     .catch((err) => logger.error(`== error loading PTZ cameras: ${err}`));
-
-  // Load any non-PTZ network cameras
-  await initCams(
-    app.ipcams.cams,
-    app.ipcams.names,
-    process.env.PTZ_CONFIG,
-    'static',
-    { chat: chat, channel: process.env.TWITCH_CHANNEL, logger: logger, db: db }
-  )
-    .then(() => logger.info('== loaded IP cameras'))
-    .catch((err) => logger.error(`== error loading IP cameras: ${err}`));
 
   // Connect to Twitch
   logger.info(
