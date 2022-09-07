@@ -1,4 +1,4 @@
-import tmi, { Options } from 'tmi.js';
+import tmi, { ChatUserstate, Client, Options } from 'tmi.js';
 import OBSWebSocket from 'obs-websocket-js';
 import sqlite3 from 'sqlite3';
 // import OBSView from './obs-view.js'
@@ -7,26 +7,20 @@ import sqlite3 from 'sqlite3';
 
 import attachProcessEvents from './attachProcessEvents';
 import { Config } from './types';
-import { openDb } from './sqlite_db';
+import { openDb } from './sqlite-db';
 import { attachObsEvents } from './attachObsEvents';
 import initializeCamera from './initializeCamera';
-import {
-  onCheerHandler,
-  onChatHandler,
-  onConnectedHandler,
-  onDisconnectedHandler,
-} from './handlers';
-// import { logger } from './slacker.mjs'
-// import * as cenv from 'custom-env'
-// import crypto from 'crypto'
-// import WindowHerder from './windowHerder.mjs'
-// import SceneHerder from './sceneHerder.mjs'
-// import linkit from './linkit.mjs'
+import BlackList from './utilities/blacklist';
 
 export async function twitchObs(config: Config) {
   const logger = config.logger || console;
   // list of camera names
   let names = [];
+
+  let chat: Client;
+  // #TODO update
+  let obsView: any;
+  let obs: OBSWebSocket;
   // number of OBS connection retries
   let obs_retries = 0;
   // OBS Windows
@@ -56,46 +50,6 @@ export async function twitchObs(config: Config) {
       setTimeout(() => process.exit(1), 0); // push it back on the event loop
     }
   }
-
-  // Setup general application behavior and logging
-  await import('../../package.json')
-    .then((pkg) => {
-      logger.log(`== starting ${pkg.default.name}@${pkg.default.version}`);
-    })
-    .catch((e) => {
-      logger.error(`Unable to open package information: ${e}`);
-    });
-  logger.log(
-    `== log levels: { console: ${logger.getLogLevel(
-      logger.level.console
-    )}, slack: ${logger.getLogLevel(logger.level.slack)} }`
-  );
-
-  attachProcessEvents(logger, shutdownFunction);
-
-  // Open and initialize the sqlite database for storing object states across restarts
-  const db = await openDb({
-    logger: logger,
-    config: {
-      ...config.sqlite_options,
-      filename: config.sqlite_options.filename || 'tmp/admins.db',
-      driver: sqlite3.Database,
-    },
-  });
-  shutdown.push(async () => {
-    logger.info('== Shutting down the local database...');
-    db.close();
-  });
-  const adminStore = new AdminStore({ logger: logger, db: db });
-  admins = await adminStore.admins; // load from store first
-
-  if (admins.length === 0) {
-    // if nothing in the store, load from the app config
-    config.admins.forEach((admin) => admins.push(admin));
-    adminStore.admins = admins; // persist any admins from the config
-  }
-
-  // User type functions
   function isSubscriber(context: any) {
     return context.subscriber || isModerator(context);
   }
@@ -111,18 +65,6 @@ export async function twitchObs(config: Config) {
   function isBroadcaster(context: any) {
     return context.badges && context.badges.broadcaster;
   }
-  // Connect to OBS
-  const obs = new OBSWebSocket();
-  shutdown.push(async () => {
-    logger.info('== Shutting down OBS...');
-    obs.disconnect();
-  });
-  const obsView = new {
-    obs: obs,
-    db: db,
-    windowKinds: windows.sourceKinds,
-    logger: logger,
-  }();
 
   async function connectOBS(obs: OBSWebSocket) {
     logger.info(`== connecting to OBS host:${config.obs.url}`);
@@ -160,81 +102,20 @@ export async function twitchObs(config: Config) {
       }, delay);
     }
   }
-  attachObsEvents(obs, obsView, logger, reconnectOBS);
-
-  // Connect to OBS
-  connectOBS(obs).catch((e) => logger.error(`Connect OBS failed: ${e.error}`));
-  // Connect to twitch
-  const chat = new tmi.Client(config.tmi);
-  shutdown.push(async () => {
-    logger.info('== Shutting down twitch...');
-    await chat.disconnect();
-  });
-
-  chat.on('cheer', onCheerHandler);
-  chat.on('chat', onChatHandler);
-  chat.on('connected', onConnectedHandler);
-  chat.on('disconnected', onDisconnectedHandler);
-  chat.on('reconnect', () => {
-    logger.info('== reconnecting to twitch');
-  });
-
-  // Load any non-PTZ network cameras
-  names = initializeCamera(config.cams.cameras, 'static', {});
-
-  // #TODO
-  // Load the PTZ cameras
-  // await initCams(app.ptz.cams, app.ptz.names, process.env.PTZ_CONFIG, 'cams', {
-  //   chat: chat,
-  //   channel: process.env.TWITCH_CHANNEL,
-  //   logger: logger,
-  //   db: db,
-  // })
-  //   .then(() => logger.info('== loaded PTZ cameras'))
-  //   .catch((err) => logger.error(`== error loading PTZ cameras: ${err}`));
-  // Connect to Twitch
-  logger.info(`== connecting to twitch: ${config.twitch_channel}`);
-
-  chat
-    .connect()
-    .then(() =>
-      logger.info(`== connected to twitch channel: ${config.twitch_channel}`)
-    )
-    .catch((err) =>
-      logger.error(
-        `Unable to connect to twitch: ${JSON.stringify(err, null, 2)}`
-      )
-    );
-}
-
-(async () => {
-  // This will process !camN commands to view and manage windows for cams/views
-  {
-    const options = {
-      logger: logger,
-      twitch: {
-        chat: chat,
-        channel: process.env.TWITCH_CHANNEL,
-      },
-      obsView: obsView,
-    };
-    app.windowHerder = new WindowHerder(options);
-    app.sceneHerder = new SceneHerder(options);
-  }
-  function sayForSubs(message) {
+  function sayForSubs(message?: string) {
     chat.say(
-      process.env.TWITCH_CHANNEL,
+      config.twitch_channel,
       message || 'This command is reserved for subscribers'
     );
   }
-  function sayForMods(message) {
+  function sayForMods(message: string) {
     chat.say(
-      process.env.TWITCH_CHANNEL,
+      config.twitch_channel,
       message || 'This command is reserved for moderators'
     );
   }
 
-  function chatBot(context, str) {
+  function chatBot(context: any, str: string) {
     // Only process the command if the message starts with a '!'
     if (!str.trim().startsWith('!')) return;
 
@@ -552,4 +433,178 @@ export async function twitchObs(config: Config) {
       }
     });
   }
-})().catch((err) => logger.error(`Application error: ${err}`));
+
+  function onCheerHandler(
+    channel: string,
+    userstate: ChatUserstate,
+    message: string,
+    self: boolean
+  ) {
+    console.debug(
+      `Cheer: ${JSON.stringify(
+        {
+          channel,
+          userstate,
+          message,
+          self,
+        },
+        null,
+        2
+      )}`
+    );
+
+    // Automatically show the 'treat' camera at the 'cheer' shortcut if it's not already shown
+    if (!obsView.inView('treat')) {
+      obsView.processChat('1treat');
+    }
+    //   if (app.ptz.cams.has('treat'))
+    //     app.ptz.cams.get('treat').moveToShortcut('cheer');
+
+    // Process this last to ensure the auto-treat doesn't override a cheer command
+    obsView.processChat(msg);
+  }
+
+  function onChatHandler(context: any, msg: string, target: string) {
+    try {
+      if (BlackList(context['display-name']) || context.isModerator) {
+        return;
+      } // ignore the bots
+
+      chatBot(context, msg); // Process chat commands
+    } catch (e) {
+      logger.error(
+        `Error processing chat: ${JSON.stringify(e)}, context: ${JSON.stringify(
+          context
+        )}`
+      );
+    }
+  }
+  // Called every time the bot connects to Twitch chat:
+  function onConnectedHandler(addr: string, port: string) {
+    console.log(`== connected to twitch server: ${addr}:${port}`);
+  }
+
+  // Called every time the bot disconnects from Twitch:
+  // TODO: reconnect rather than exit
+  function onDisconnectedHandler(reason: any) {
+    console.info(`== disconnected from twitch: ${reason || 'unknown reason'}`);
+  }
+
+  // application main subroutine
+  try {
+    // Setup general application behavior and logging
+    await import('../../package.json')
+      .then((pkg) => {
+        logger.log(`== starting ${pkg.default.name}@${pkg.default.version}`);
+      })
+      .catch((e) => {
+        logger.error(`Unable to open package information: ${e}`);
+      });
+    logger.log(
+      `== log levels: { console: ${logger.getLogLevel(
+        logger.level.console
+      )}, slack: ${logger.getLogLevel(logger.level.slack)} }`
+    );
+
+    attachProcessEvents(logger, shutdownFunction);
+
+    // Open and initialize the sqlite database for storing object states across restarts
+    const db = await openDb({
+      logger: logger,
+      config: {
+        ...config.sqlite_options,
+        filename: config.sqlite_options.filename || 'tmp/admins.db',
+        driver: sqlite3.Database,
+      },
+    });
+    shutdown.push(async () => {
+      logger.info('== Shutting down the local database...');
+      db.close();
+    });
+    const adminStore = new AdminStore({ logger: logger, db: db });
+    admins = await adminStore.admins; // load from store first
+
+    // Connect to OBS
+    obs = new OBSWebSocket();
+    shutdown.push(async () => {
+      logger.info('== Shutting down OBS...');
+      obs.disconnect();
+    });
+    // const obsView = new {
+    //   obs: obs,
+    //   db: db,
+    //   windowKinds: windows.sourceKinds,
+    //   logger: logger,
+    // }();
+
+    if (admins.length === 0) {
+      // if nothing in the store, load from the app config
+      config.admins.forEach((admin) => admins.push(admin));
+      adminStore.admins = admins; // persist any admins from the config
+    }
+
+    // User type functions
+
+    attachObsEvents(obs, obsView, logger, reconnectOBS);
+
+    // Connect to OBS
+    connectOBS(obs).catch((e) =>
+      logger.error(`Connect OBS failed: ${e.error}`)
+    );
+    // Connect to twitch
+    chat = new tmi.Client(config.tmi);
+    shutdown.push(async () => {
+      logger.info('== Shutting down twitch...');
+      await chat.disconnect();
+    });
+
+    chat.on('cheer', onCheerHandler);
+    chat.on('chat', onChatHandler);
+    chat.on('connected', onConnectedHandler);
+    chat.on('disconnected', onDisconnectedHandler);
+    chat.on('reconnect', () => {
+      logger.info('== reconnecting to twitch');
+    });
+
+    // Load any non-PTZ network cameras
+    names = initializeCamera(config.cams.cameras, 'static', {});
+
+    // #TODO
+    // Load the PTZ cameras
+    // await initCams(app.ptz.cams, app.ptz.names, process.env.PTZ_CONFIG, 'cams', {
+    //   chat: chat,
+    //   channel: process.env.TWITCH_CHANNEL,
+    //   logger: logger,
+    //   db: db,
+    // })
+    //   .then(() => logger.info('== loaded PTZ cameras'))
+    //   .catch((err) => logger.error(`== error loading PTZ cameras: ${err}`));
+    // Connect to Twitch
+    logger.info(`== connecting to twitch: ${config.twitch_channel}`);
+
+    chat
+      .connect()
+      .then(() =>
+        logger.info(`== connected to twitch channel: ${config.twitch_channel}`)
+      )
+      .catch((err) =>
+        logger.error(
+          `Unable to connect to twitch: ${JSON.stringify(err, null, 2)}`
+        )
+      );
+    const commandProcessor = {
+      options: {
+        logger: logger,
+        twitch: {
+          chat: chat,
+          channel: config.twitch_channel,
+        },
+        obsView: obsView,
+      },
+      windowHerder = new WindowHerder(options),
+      sceneHerder = new SceneHerder(options),
+    };
+  } catch (e) {
+    console.error(`app error ${e}`);
+  }
+}
