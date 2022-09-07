@@ -21,8 +21,13 @@ export type Config = {
   twitch_channel: string;
   action: () => void;
   logger: any;
-  cam_names: string[];
-  cams: { [key: string]: { [key: string]: any } };
+  cams: {
+    cameras: {
+      static: string[];
+      [key: string]: { [key: string]: any };
+    };
+    names: string[];
+  };
   windows: { sourceKinds: string[]; [key: string]: any };
   sqlite_options: ISqlite.Config;
   admins: string[];

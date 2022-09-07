@@ -9,6 +9,13 @@ import attachProcessEvents from './attachProcessEvents';
 import { Config } from './types';
 import { openDb } from './sqlite_db';
 import { attachObsEvents } from './attachObsEvents';
+import initializeCamera from './initializeCamera';
+import {
+  onCheerHandler,
+  onChatHandler,
+  onConnectedHandler,
+  onDisconnectedHandler,
+} from './handlers';
 // import { logger } from './slacker.mjs'
 // import * as cenv from 'custom-env'
 // import crypto from 'crypto'
@@ -18,8 +25,8 @@ import { attachObsEvents } from './attachObsEvents';
 
 export async function twitchObs(config: Config) {
   const logger = config.logger || console;
-  // Non-PTZ network cams
-  const ipCams = { names: config.cam_names || [], cams: config.cams };
+  // list of camera names
+  let names = [];
   // number of OBS connection retries
   let obs_retries = 0;
   // OBS Windows
@@ -172,125 +179,35 @@ export async function twitchObs(config: Config) {
     logger.info('== reconnecting to twitch');
   });
 
-  // init cameras using config
-  async function initCams(
-    map: { [key: string]: { [key: string]: any } },
-    names: string[],
-    configFile: string,
-    element: string,
-    options = {}
-  ) {
-    return import(configFile)
-      .catch((e) => {
-        logger.error(`Unable to import '${configFile}': ${e}`);
-      })
-      .then((conf) => {
-        // Grab the appropriate entry from the config file
-        if (element in conf.default) {
-          for (const [key, value] of Object.entries(conf.default[element])) {
-            value.name = key;
-            Object.assign(value, options);
-
-            names.push(key.toLocaleLowerCase());
-          }
-        }
-      });
-  }
   // Load any non-PTZ network cameras
-  await initCams(ipCams.cams, ipCams.names, 'static', {
-    chat: chat,
-    channel: config.twitch_channel,
-    logger: logger,
-    db: db,
-  })
-    .then(() => logger.info('== loaded IP cameras'))
-    .catch((err) => logger.error(`== error loading IP cameras: ${err}`));
-}
+  names = initializeCamera(config.cams.cameras, 'static', {});
 
-(async () => {
-  // Grab the version and log it
-
-  // Always show log levels at startup
-
-  // ///////////////////////////////////////////////////////////////////////////
-
-  // ///////////////////////////////////////////////////////////////////////////
-
-  // ///////////////////////////////////////////////////////////////////////////
+  // #TODO
   // Load the PTZ cameras
-  await initCams(app.ptz.cams, app.ptz.names, process.env.PTZ_CONFIG, 'cams', {
-    chat: chat,
-    channel: process.env.TWITCH_CHANNEL,
-    logger: logger,
-    db: db,
-  })
-    .then(() => logger.info('== loaded PTZ cameras'))
-    .catch((err) => logger.error(`== error loading PTZ cameras: ${err}`));
-
+  // await initCams(app.ptz.cams, app.ptz.names, process.env.PTZ_CONFIG, 'cams', {
+  //   chat: chat,
+  //   channel: process.env.TWITCH_CHANNEL,
+  //   logger: logger,
+  //   db: db,
+  // })
+  //   .then(() => logger.info('== loaded PTZ cameras'))
+  //   .catch((err) => logger.error(`== error loading PTZ cameras: ${err}`));
   // Connect to Twitch
-  logger.info(
-    `== connecting to twitch: ${process.env.TWITCH_USER}@${process.env.TWITCH_CHANNEL}`
-  );
+  logger.info(`== connecting to twitch: ${config.twitch_channel}`);
+
   chat
     .connect()
     .then(() =>
-      logger.info(
-        `== connected to twitch channel: ${process.env.TWITCH_USER}@${process.env.TWITCH_CHANNEL}`
-      )
+      logger.info(`== connected to twitch channel: ${config.twitch_channel}`)
     )
     .catch((err) =>
       logger.error(
         `Unable to connect to twitch: ${JSON.stringify(err, null, 2)}`
       )
     );
+}
 
-  function onCheerHandler(target, context, msg) {
-    logger.debug(
-      `Cheer: ${JSON.stringify(
-        { target: target, msg: msg, context: context },
-        null,
-        2
-      )}`
-    );
-
-    // Automatically show the 'treat' camera at the 'cheer' shortcut if it's not already shown
-    if (!obsView.inView('treat')) obsView.processChat('1treat');
-    if (app.ptz.cams.has('treat'))
-      app.ptz.cams.get('treat').moveToShortcut('cheer');
-
-    // Process this last to ensure the auto-treat doesn't override a cheer command
-    obsView.processChat(msg);
-  }
-
-  function onChatHandler(target, context, msg) {
-    try {
-      if (
-        app.config.ignore &&
-        app.config.ignore.includes(context['display-name'])
-      )
-        return; // ignore the bots
-
-      chatBot(context, msg); // Process chat commands
-      linkit(context, msg); // Send any links to slack
-    } catch (e) {
-      logger.error(
-        `Error processing chat: ${JSON.stringify(e)}, context: ${JSON.stringify(
-          context
-        )}`
-      );
-    }
-  }
-  // Called every time the bot connects to Twitch chat:
-  function onConnectedHandler(addr, port) {
-    logger.log(`== connected to twitch server: ${addr}:${port}`);
-  }
-
-  // Called every time the bot disconnects from Twitch:
-  // TODO: reconnect rather than exit
-  function onDisconnectedHandler(reason) {
-    logger.info(`== disconnected from twitch: ${reason || 'unknown reason'}`);
-  }
-
+(async () => {
   // This will process !camN commands to view and manage windows for cams/views
   {
     const options = {
