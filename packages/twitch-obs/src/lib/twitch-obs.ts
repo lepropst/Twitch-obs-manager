@@ -1,4 +1,4 @@
-import tmi, { ChatUserstate, Client, Options } from 'tmi.js';
+import tmi, { ChatUserstate, Client, Options, Userstate } from 'tmi.js';
 import OBSWebSocket from 'obs-websocket-js';
 import sqlite3 from 'sqlite3';
 // import OBSView from './obs-view.js'
@@ -16,7 +16,6 @@ export async function twitchObs(config: Config) {
   const logger = config.logger || console;
   // list of camera names
   let names = [];
-
   let chat: Client;
   // #TODO update
   let obsView: any;
@@ -27,7 +26,6 @@ export async function twitchObs(config: Config) {
   const windows = {
     sourceKinds: config.windows.sourceKinds || ['dshow_input', 'ffmpeg_source'],
   };
-
   // Twitch stream options
   const stream: any = {};
   let admins: string[] = [];
@@ -115,7 +113,7 @@ export async function twitchObs(config: Config) {
     );
   }
 
-  function chatBot(context: any, str: string) {
+  function chatBot(context: Userstate, str: string) {
     // Only process the command if the message starts with a '!'
     if (!str.trim().startsWith('!')) return;
 
@@ -139,9 +137,9 @@ export async function twitchObs(config: Config) {
         // ANYONE COMMANDS
         case '!cams': {
           const sources = obsView
-            .getSources(app.config.windows.sourceKinds)
-            .map((s) =>
-              app.ptz.names.includes(s)
+            .getSources(config.windows.sourceKinds)
+            .map((s: string) =>
+              config.cams.names.includes(s)
                 ? `${s.replace(/\W/g, '-')} (ptz)`
                 : s.replace(/\W/g, '-')
             );
@@ -437,16 +435,14 @@ export async function twitchObs(config: Config) {
   function onCheerHandler(
     channel: string,
     userstate: ChatUserstate,
-    message: string,
-    self: boolean
-  ) {
+    message: string
+  ): void {
     console.debug(
       `Cheer: ${JSON.stringify(
         {
           channel,
           userstate,
           message,
-          self,
         },
         null,
         2
@@ -461,26 +457,31 @@ export async function twitchObs(config: Config) {
     //     app.ptz.cams.get('treat').moveToShortcut('cheer');
 
     // Process this last to ensure the auto-treat doesn't override a cheer command
-    obsView.processChat(msg);
+    obsView.processChat(message);
   }
 
-  function onChatHandler(context: any, msg: string, target: string) {
+  function onChatHandler(
+    channel: string,
+    userstate: ChatUserstate,
+    message: string
+  ) {
     try {
-      if (BlackList(context['display-name']) || context.isModerator) {
-        return;
+      if (BlackList(userstate['display-name']) || userstate.mod) {
+        console.log(`bot messaged ${message}`);
       } // ignore the bots
-
-      chatBot(context, msg); // Process chat commands
+      else {
+        chatBot(userstate, message);
+      } // Process chat commands
     } catch (e) {
       logger.error(
         `Error processing chat: ${JSON.stringify(e)}, context: ${JSON.stringify(
-          context
+          userstate
         )}`
       );
     }
   }
   // Called every time the bot connects to Twitch chat:
-  function onConnectedHandler(addr: string, port: string) {
+  function onConnectedHandler(addr: string, port: number) {
     console.log(`== connected to twitch server: ${addr}:${port}`);
   }
 
@@ -601,8 +602,8 @@ export async function twitchObs(config: Config) {
         },
         obsView: obsView,
       },
-      windowHerder = new WindowHerder(options),
-      sceneHerder = new SceneHerder(options),
+      windowHerder: new WindowHerder(options),
+      sceneHerder: new SceneHerder(options),
     };
   } catch (e) {
     console.error(`app error ${e}`);
