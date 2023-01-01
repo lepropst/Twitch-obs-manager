@@ -31,4 +31,5 @@ export type Config = {
   windows: { sourceKinds: string[]; [key: string]: any };
   sqlite_options: ISqlite.Config;
   admins: string[];
+  defaultCamera: string;
 };

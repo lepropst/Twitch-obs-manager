@@ -7,6 +7,7 @@
   "dependencies": {
     "obs-websocket-js": "^4.0.3",
     "onvif": "^0.6.6",
+    "sql.js": "^1.8.0",
     "sqlite": "^4.1.2",
     "tmi.js": "^1.8.5",
     "tslib": "^2.3.0"

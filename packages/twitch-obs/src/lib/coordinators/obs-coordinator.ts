@@ -1,3 +1,4 @@
+import { addAbortSignal } from 'stream';
 import { Client } from 'tmi.js';
 export type ObsCoordinatorOptions = { logger: any; twitch: any; obsView: any };
 export default class ObsCoordinator {
@@ -14,6 +15,23 @@ export default class ObsCoordinator {
 
     this.changed = false;
     this.commands = new Map();
+  }
+  showInfo(...args: any[]) {
+    if (args.length > 0) {
+      const [index, value = '*'] = args;
+      if (this.obsView.getWindows().length > index) {
+        this.twitch.chat.say(
+          this.twitch.channel,
+          `cam${index} x:${this.obsView.getWindowX(
+            index
+          )} y:${this.obsView.getWindowY(
+            index
+          )} w:${this.obsView.getWindowWidth(
+            index
+          )} h:${this.obsView.getWindowHeight(index)}`
+        );
+      }
+    }
   }
 
   command(name: any, txt: string) {

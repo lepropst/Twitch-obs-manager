@@ -36,19 +36,6 @@ export default class WindowHerder extends ObsCoordinator {
     }
   }
 
-  showInfo(index: number, value = '*') {
-    if (this.obsView.getWindows().length > index) {
-      this.twitch.chat.say(
-        this.twitch.channel,
-        `cam${index} x:${this.obsView.getWindowX(
-          index
-        )} y:${this.obsView.getWindowY(index)} w:${this.obsView.getWindowWidth(
-          index
-        )} h:${this.obsView.getWindowHeight(index)}`
-      );
-    }
-  }
-
   setXCoord(index: any, value: string | undefined) {
     if (!value) return;
     const current = this.obsView.getWindowX(index);
